@@ -141,14 +141,14 @@ namespace Space_Manager
             list.Add(space.Level.Name);
             list.Add(space.get_Parameter(BuiltInParameter.ROOM_NUMBER).AsString());
             list.Add(space.get_Parameter(BuiltInParameter.ROOM_NAME).AsString());            
-            list.Add(UnitUtils.ConvertFromInternalUnits(space.Area, DisplayUnitType.DUT_SQUARE_METERS).ToString());
+            list.Add(Math.Round(UnitUtils.ConvertFromInternalUnits(space.Area, DisplayUnitType.DUT_SQUARE_METERS),2).ToString()+" m²");
             if(associated_room!=null)
             {
                 list.Add(associated_room.Id.ToString());
                 list.Add(associated_room.Level.Name);
                 list.Add(associated_room.get_Parameter(BuiltInParameter.ROOM_NUMBER).AsString());
                 list.Add(associated_room.get_Parameter(BuiltInParameter.ROOM_NAME).AsString());
-                list.Add(UnitUtils.ConvertFromInternalUnits(associated_room.Area, DisplayUnitType.DUT_SQUARE_METERS).ToString());
+                list.Add(Math.Round(UnitUtils.ConvertFromInternalUnits(associated_room.Area, DisplayUnitType.DUT_SQUARE_METERS),2).ToString() + " m²");
                 list.Add(écart);
                 list.Add(commentaire);
             }
@@ -211,7 +211,7 @@ namespace Space_Manager
                 using (Transaction t = new Transaction(doc, "Analyser les espaces"))
                 {
                     t.Start();
-                    Document linkDoc = null;
+                  
                     string test = "";
                     string test2 = "";
                     string filename = form.GetSelectedRVTlink();
@@ -219,14 +219,16 @@ namespace Space_Manager
                     List<ElementId> roomId = new List<ElementId>();
                     List<string> roomNamelist = new List<string>();
 
+
                     List<List<string>> master_list = new List<List<string>>();
 
-                    foreach (RevitLinkInstance instance in new FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_RvtLinks).WhereElementIsNotElementType().ToElements().Cast<RevitLinkInstance>())
-                    {
-                        linkDoc = instance.GetLinkDocument();
-                        if (linkDoc != null && Path.GetFileName(linkDoc.PathName) == filename)
-                        {
-                            foreach (Room r in new FilteredElementCollector(linkDoc).OfClass(typeof(SpatialElement)).OfCategory(BuiltInCategory.OST_Rooms).Cast<Room>())
+                    RevitLinkInstance link = (from element in new FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_RvtLinks).WhereElementIsNotElementType().ToElements().Cast<RevitLinkInstance>()
+                                                  where Path.GetFileName(element.GetLinkDocument().PathName).Contains(filename)
+                                                  select element).ToList().First();
+
+                    Document linkDoc = link.GetLinkDocument();
+                   
+                    foreach (Room r in new FilteredElementCollector(linkDoc).OfClass(typeof(SpatialElement)).OfCategory(BuiltInCategory.OST_Rooms).Cast<Room>())
                             {
                                 if (DistinguishRoom(r) != RoomState.NotPlaced)
                                 {
@@ -234,12 +236,8 @@ namespace Space_Manager
                                     roomId.Add(r.Id);
                                     roomNamelist.Add(r.Name);
                                 }
-                            }
-                        }
-                    }
-
-                    test += string.Join(" / ", roomNamelist);
-
+                            }              
+                    
                     List<Room> associatedroomList = new List<Room>();
                     List<string> associatedroomNameList = new List<string>();
                     List<ElementId> associatedroomList_Id = new List<ElementId>();
@@ -248,10 +246,10 @@ namespace Space_Manager
                     foreach (Autodesk.Revit.DB.Mechanical.Space s in new FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_MEPSpaces).Cast<Autodesk.Revit.DB.Mechanical.Space>())
                     {
                         spaceNamelist.Add(s.Name);
-                    }
+                    }             
 
                     foreach (Autodesk.Revit.DB.Mechanical.Space s in new FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_MEPSpaces).Cast<Autodesk.Revit.DB.Mechanical.Space>())
-                    {
+                        {
                         Parameter spaceName = s.get_Parameter(BuiltInParameter.ROOM_NAME);
                         Parameter spaceNumber = s.get_Parameter(BuiltInParameter.ROOM_NUMBER);
                         Parameter roomName = s.get_Parameter(BuiltInParameter.SPACE_ASSOC_ROOM_NAME);
@@ -259,16 +257,13 @@ namespace Space_Manager
 
                         Room associated_room;
                         try
-                        {
-                            associated_room = (from element in new FilteredElementCollector(linkDoc).
-                                               OfClass(typeof(SpatialElement)).
-                                               OfCategory(BuiltInCategory.OST_Rooms)
+                        {                          
+                            associated_room = (from element in new FilteredElementCollector(linkDoc).OfClass(typeof(SpatialElement)).OfCategory(BuiltInCategory.OST_Rooms)
                                                where element.Name == roomName.AsString() + " " + roomNumber.AsString()
                                                select element).Cast<Room>().ToList().First();
                             associatedroomList.Add(associated_room);
                             associatedroomNameList.Add(associated_room.Name);
-                            associatedroomList_Id.Add(associated_room.Id);
-                           
+                            associatedroomList_Id.Add(associated_room.Id);                           
                         }
                         catch
                         {
@@ -292,35 +287,41 @@ namespace Space_Manager
                         if (DistinguishSpace(s) == SpaceState.NotPlaced)
                             master_list.Add(Get_Space_Info(s, null, "Espace non placé",comment));
 
-                        else if (DistinguishSpace(s) == SpaceState.NotEnclosed)
-                            master_list.Add(Get_Space_Info(s,null,"Espace non fermé",comment));
+                        if (DistinguishSpace(s) == SpaceState.NotEnclosed)
+                            master_list.Add(Get_Space_Info(s, null,"Espace non fermé",comment));
 
-                        else if (DistinguishSpace(s) == SpaceState.Redundant)
-                            master_list.Add(Get_Space_Info(s, null,"Espace superflu",comment)); 
+                        if (DistinguishSpace(s) == SpaceState.Redundant)
+                            master_list.Add(Get_Space_Info(s, null,"Espace superflu",comment));
 
-                        else if (DistinguishSpace(s) == SpaceState.Placed&&(roomName.AsString() == "Non occupé"|| roomName.AsString() == "Unoccupied"))
-                            master_list.Add(Get_Space_Info(s, null,"Espace sans pièce associée",comment)); 
+                        if (DistinguishSpace(s) == SpaceState.Placed && (roomName.AsString() == "Non occupé" || roomName.AsString() == "Unoccupied"))
+                            master_list.Add(Get_Space_Info(s, null, "Espace sans pièce associée", comment));
 
-                        else// (DistinguishSpace(s) == SpaceState.Placed && roomName.AsString() != "Non occupé" && roomName.AsString() != "Unoccupied")
+                        if (DistinguishSpace(s) == SpaceState.Placed && roomName.AsString() != "Non occupé" && roomName.AsString() != "Unoccupied")
                         {
                             List<string> écart = new List<string>();
-                            
-                            if (spaceName.AsString() == roomName.AsString()&& spaceNumber.AsString() == roomNumber.AsString()&& associated_room != null && s.Area == associated_room.Area)
-                                master_list.Add(Get_Space_Info(s, associated_room, "_Aucun_",comment));
+                            double space_area = Math.Round(UnitUtils.ConvertFromInternalUnits(s.Area, DisplayUnitType.DUT_SQUARE_METERS), 2);
+                            double room_area = 0;
+                            if (associated_room != null)
+                                room_area = Math.Round(UnitUtils.ConvertFromInternalUnits(associated_room.Area, DisplayUnitType.DUT_SQUARE_METERS), 2);
+
+                            if (spaceName.AsString() == roomName.AsString() && spaceNumber.AsString() == roomNumber.AsString() && associated_room != null && space_area == room_area)
+                                master_list.Add(Get_Space_Info(s, associated_room, "_Aucun_", comment));
 
                             if (spaceName.AsString() != roomName.AsString())
                                 écart.Add("Nom");
-                          
+
                             if (spaceNumber.AsString() != roomNumber.AsString())
                                 écart.Add("Numéro");
 
-                            if (associated_room != null && s.Area != associated_room.Area)
+                            if (associated_room != null && space_area != room_area)
                                 écart.Add("Surface");
 
-                            if ((spaceName.AsString() != roomName.AsString())||(spaceNumber.AsString() != roomNumber.AsString())||(associated_room != null && s.Area != associated_room.Area))
-                                master_list.Add(Get_Space_Info(s, associated_room, string.Join(" + ",écart),comment));
-                        }                    
+                            if ((spaceName.AsString() != roomName.AsString()) || (spaceNumber.AsString() != roomNumber.AsString()) || (associated_room != null && space_area != room_area))
+                                master_list.Add(Get_Space_Info(s, associated_room, "Écart : "+ string.Join(" + ", écart), comment));
+                        }
+
                     }
+                  
 
                     foreach (Room room in roomList)
                     {
@@ -353,7 +354,7 @@ namespace Space_Manager
                         sheet.Cells[row2, 8].Value = "Numéro pièce";
                         sheet.Cells[row2, 9].Value = "Nom pièce";
                         sheet.Cells[row2, 10].Value = "Surface pièce";
-                        sheet.Cells[row2, 11].Value = "Ecart espace-pièce";
+                        sheet.Cells[row2, 11].Value = "Écart espace-pièce";
                         sheet.Cells[row2, 12].Value = "Commentaire";
 
                         foreach (List<string> list in master_list)
